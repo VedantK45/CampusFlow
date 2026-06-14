@@ -113,7 +113,7 @@ export default function Login() {
       return;
     }
 
-    const onMessage = (event) => {
+    const onMessage = async (event) => {
       if (!event.data || event.data.type !== "AUTH_SUCCESS") {
         return;
       }
@@ -127,6 +127,9 @@ export default function Login() {
       // Save JWT
       localStorage.setItem("campusflow_token", token);
 
+      // user.email
+      await syncEmails(user.email, token);
+
       // Save user
       localStorage.setItem("campusflow_user", JSON.stringify(user));
 
@@ -134,6 +137,32 @@ export default function Login() {
 
       // redirect
       window.location.href = "/dashboard";
+    };
+
+    const syncEmails = async (email, token) => {
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_BACKEND_URL}/test/sync/${email}`,
+          {
+            method: "GET",
+
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to sync emails");
+        }
+
+        const data = await response.json();
+
+        console.log("Synced Emails:", data);
+      } catch (err) {
+        console.error(err);
+      }
     };
 
     window.addEventListener("message", onMessage);
