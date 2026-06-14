@@ -15,8 +15,12 @@ const {
     uploadPDF
 } = require("../services/s3Service");
 
+const {
+    publishEmail
+} = require("../services/redisPublisher");
 
-cron.schedule("*/5 * * * *", async () => {
+
+cron.schedule(`*/${process.env.SYNC_MIN} * * * *`, async () => {
 
     console.log("Running Email Sync...");
 
@@ -66,8 +70,12 @@ cron.schedule("*/5 * * * *", async () => {
                             email.gmailId
                         );
 
-                    // Save metadata
-                    await Email.create({
+                    console.log(
+                        `${email.subject} uploaded to S3`
+                    );
+
+                    // save metadata
+                    const savedEmail = await Email.create({
 
                         userId:
                             user._id,
@@ -106,6 +114,45 @@ cron.schedule("*/5 * * * *", async () => {
 
                     console.log(
                         `${email.subject} saved`
+                    );
+
+                    // publish to redis
+                    await publishEmail({
+
+                        emailId:
+                            savedEmail._id,
+
+                        userId:
+                            user._id,
+
+                        gmailId:
+                            email.gmailId,
+
+                        subject:
+                            email.subject,
+
+                        from:
+                            email.from,
+
+                        to:
+                            email.to,
+
+                        body:
+                            email.body,
+
+                        html:
+                            email.html,
+
+                        date:
+                            email.date,
+
+                        pdfUrl:
+                            uploaded.url,
+
+                    });
+
+                    console.log(
+                        `${email.subject} published`
                     );
 
                 }

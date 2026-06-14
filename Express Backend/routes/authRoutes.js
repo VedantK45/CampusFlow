@@ -1,5 +1,6 @@
 const express = require("express");
 const { google } = require("googleapis");
+const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
 const router = express.Router();
@@ -33,9 +34,8 @@ router.get("/google/callback", async (req, res) => {
 
         const code = req.query.code;
 
-        const { tokens } = await oauth2Client.getToken(code);
-
-        console.log(tokens);
+        const { tokens } =
+            await oauth2Client.getToken(code);
 
         oauth2Client.setCredentials(tokens);
 
@@ -44,7 +44,6 @@ router.get("/google/callback", async (req, res) => {
             auth: oauth2Client
         });
 
-        // Get user's Gmail address
         const profile = await gmail.users.getProfile({
             userId: "me"
         });
@@ -58,16 +57,22 @@ router.get("/google/callback", async (req, res) => {
         if (!user) {
 
             user = await User.create({
+
                 email,
-                refreshToken: tokens.refresh_token,
+
+                refreshToken:
+                    tokens.refresh_token,
+
                 lastSyncTime: 0
+
             });
 
         } else {
 
             if (tokens.refresh_token) {
 
-                user.refreshToken = tokens.refresh_token;
+                user.refreshToken =
+                    tokens.refresh_token;
 
                 await user.save();
 
@@ -75,11 +80,50 @@ router.get("/google/callback", async (req, res) => {
 
         }
 
-        res.json({
-            success: true,
-            email,
-            refreshTokenSaved: !!tokens.refresh_token
-        });
+        const token = jwt.sign(
+
+            {
+                id: user._id,
+                email: user.email
+            },
+
+            process.env.JWT_SECRET,
+
+            {
+                expiresIn: "30d"
+            }
+
+        );
+
+        res.send(`
+
+        <script>
+
+            window.opener.postMessage(
+
+                {
+
+                    type: "AUTH_SUCCESS",
+
+                    token: "${token}",
+
+                    user: {
+
+                        email: "${user.email}"
+
+                    }
+
+                },
+
+                "*"
+
+            );
+
+            window.close();
+
+        </script>
+
+        `);
 
     }
 
@@ -87,10 +131,7 @@ router.get("/google/callback", async (req, res) => {
 
         console.log(err);
 
-        res.status(500).json({
-            success: false,
-            error: err.message
-        });
+        res.send("Authentication Failed");
 
     }
 

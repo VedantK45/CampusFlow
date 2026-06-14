@@ -4,12 +4,25 @@ const { fetchNewEmails } = require("../services/gmailService");
 const { generatePDF } = require("../services/pdfService");
 const Email = require("../models/Email");
 const { uploadPDF } = require("../services/s3Service");
+const { publishEmail } = require("../services/redisPublisher");
 
 const router = express.Router();
 
-router.get("/sync/:email", async (req, res) => {
+const authMiddleware =
+    require("../middleware/authMiddleware");
+
+router.get("/sync/:email", authMiddleware, async (req, res) => {
 
     try {
+        // console.log(req.user);
+        /*
+            {
+              id: '6a2e7b77aa34216ecf145f1e',
+              email: 'kallolk.ic.23@nitj.ac.in',
+              iat: 1781431159,
+              exp: 1784023159
+            }
+        */
 
         const user = await User.findOne({
             email: req.params.email
@@ -46,8 +59,12 @@ router.get("/sync/:email", async (req, res) => {
                     email.gmailId
                 );
 
+            console.log(
+                `${email.subject} uploaded to S3`
+            );
+
             // save metadata
-            await Email.create({
+            const savedEmail = await Email.create({
 
                 userId: user._id,
 
@@ -82,6 +99,49 @@ router.get("/sync/:email", async (req, res) => {
                     uploaded.key
 
             });
+
+            console.log(
+                `${email.subject} saved`
+            );
+
+            // publish to redis
+            await publishEmail({
+
+                emailId:
+                    savedEmail._id,
+
+                userId:
+                    user._id,
+
+                gmailId:
+                    email.gmailId,
+
+                subject:
+                    email.subject,
+
+                from:
+                    email.from,
+
+                to:
+                    email.to,
+
+                body:
+                    email.body,
+
+                html:
+                    email.html,
+
+                date:
+                    email.date,
+
+                pdfUrl:
+                    uploaded.url,
+
+            });
+
+            console.log(
+                `${email.subject} published`
+            );
 
             results.push({
 
